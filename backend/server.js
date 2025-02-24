@@ -1,54 +1,44 @@
-const express = require("express");
-const pg = require("pg");
-const cors = require("cors");
-const dotenv = require("dotenv");
+import dotenv from "dotenv";
+import cors from "cors";
+import userRoutes from "./Routes/userRoute.js";
+import pool from "./config/db.js";
+import express from 'express';
+import bodyParser from 'body-parser'; 
+import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
 
 const app = express();
-const port = 5000;
+const port = process.env.PORT || 5000;
+// const { createClient } = require('@supabase/supabase-js');
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 // Middleware
 app.use(cors());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.json());
 
-// PostgreSQL Connection
-const { Pool } = pg;
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+// Verify PostgreSQL connection
+pool.connect()
+  .then(() => console.log("✅ Connected to PostgreSQL!"))
+  .catch((err) => console.error("❌ Database connection error:", err));
 
-// Check if the database is connected
-pool.connect((err, client, release) => {
-  if (err) {
-    console.error("❌ Database connection error:", err.stack);
+// Routes
+app.use("/users", userRoutes);
+
+
+app.post('/api/events', async (req, res) => {
+  const eventDetails = req.body;
+  const { data, error } = await supabase.from('event_details').insert([eventDetails]);
+
+  if (error) {
+      res.status(500).json({ error: error.message });
   } else {
-    console.log("✅ Connected to PostgreSQL database!");
-    release(); // Release the client back to the pool
+      res.status(200).json({ data });
   }
 });
 
+app.get("/", (req, res) => res.send("🚀 API is running"));
 
-// Route to check if server is running
-app.get("/", (req, res) => {
-  res.send("🚀 API is running...");
-});
-
-// Route to fetch all users from users_details table
-app.get("/users", async (req, res) => {
-  try {
-    const result = await pool.query("SELECT * FROM user_details");
-    res.json(result.rows);
-  } catch (error) {
-    console.error("❌ Error fetching users:", error);
-    res.status(500).json({ error: "Internal Server Error", details: error.message });
-  }
-});
-
-
-
-
-// Start server
-app.listen(port, () => {
-  console.log(`🚀 Server running on http://localhost:${port}`);
-});
+app.listen(port, () => console.log(`🚀 Server running on port ${port}`));
